@@ -1,0 +1,69 @@
+select datetrunc(t1.gmt_create,'dd') as 日期  ,
+       count(distinct(t2.user_id )) as 强风控通过人数,
+       count(distinct(case when t3.point_code = 'bs_ym_qfktg'  then t3.username end )) as  强风控生成额度页面人数,
+  case when  count(distinct(t2.user_id )) = 0 then 0 else  count(distinct(case when t3.point_code = 'bs_ym_qfktg'  then t3.username end ))/ count(distinct(t2.user_id )) end  as 强分控通过到生成额度转化,
+       count(distinct(case when t3.point_code = 'bs_ym_qfkwjg'  then t3.username end )) as  强风控无结果页面人数,
+  case when count(distinct(t2.user_id )) = 0 then 0 else count(distinct(case when t3.point_code = 'bs_ym_qfkwjg'  then t3.username end ))/count(distinct(t2.user_id )) end as  强分控通过到无结果转化,
+       count(distinct(case when t3.point_code = 'bs_ym_jqzy' and t3.gmt_create > t2.gmt_risk then t3.username end )) as 强风控通过到首页人数,
+  case when count(distinct(t2.user_id ))= 0 then 0 else   count(distinct(case when t3.point_code = 'bs_ym_jqzy' and t3.gmt_create > t2.gmt_risk then t3.username end ))/count(distinct(t2.user_id ))  end as 强风控通过首页转化,
+       count(distinct(case when t3.point_code = 'bs_ym_qrjk'  then t3.username end )) as  确认借款页面人数,
+  case when count(distinct(t2.user_id )) = 0 then 0 else    count(distinct(case when t3.point_code = 'bs_ym_qrjk'  then t3.username end ))/count(distinct(t2.user_id ))  end as 强风控通过到确认借款页面转化,
+       count(distinct(case when t3.point_code = 'bs_ym_spxz'  then t3.username end )) as  商品选择页面人数,
+  case when count(distinct(case when t3.point_code = 'bs_ym_qrjk'  then t3.username end )) =0 then 0  else  count(distinct(case when t3.point_code = 'bs_ym_spxz'  then t3.username end ))/ count(distinct(case when t3.point_code = 'bs_ym_qrjk'  then t3.username end )) end 确认借款到商品选择页面转化,
+       count(distinct(case when t3.point_code = 'bs_ym_spxz'  then t.user_id end )) as  商品选择页发起借款人数,
+  case when   count(distinct(case when t3.point_code = 'bs_ym_spxz'  then t3.username end )) = 0 then 0 else  count(distinct(case when t3.point_code = 'bs_ym_spxz'  then t.user_id end ))/count(distinct(case when t3.point_code = 'bs_ym_spxz'  then t3.username end ))  end as  进商品页面到发起借款转化,
+       count(distinct(case when t3.point_code = 'bs_ym_qrjk' then t4.mobilenumber end )) as 点击发起借款按钮用户数,   
+       count(distinct(t.user_id )) as 发起借款人数,
+       count(distinct(t.user_id ))/count(distinct(t2.user_id )) as 强风控通过到发起借款转化     
+      
+from
+
+( -- 新用户
+    select id,user_name,gmt_create
+    from hour_lsd_user_da
+    where pt = to_char(dateadd(getdate(), -1, 'dd'), 'yyyymmdd')
+    and gmt_create >= '2018-08-04 00:00:00'
+)t1
+join 
+( -- 强风控通过
+    select user_id ,gmt_risk
+    from hour_lsd_user_auth_da
+    where pt = to_char(dateadd(getdate(), -1, 'dd'), 'yyyymmdd')
+    and risk_status = 1
+)t2
+on t1.id = t2.user_id 
+and datetrunc(t1.gmt_create,'dd')  = datetrunc(t2.gmt_risk,'dd')
+ left JOIN
+( --页面统计
+    select username  ,gmt_create,point_code
+    from hour_page_point_record_di
+    where pt <= to_char(dateadd(getdate(), -1, 'dd'), 'yyyymmdd')
+    and point_code in ('bs_ym_qfktg','bs_ym_qfkwjg','bs_ym_jqzy','bs_ym_qrjk','bs_ym_spxz')
+   
+)t3
+on t1.user_name = t3.username  
+and datetrunc(t1.gmt_create,'dd')  = datetrunc(t3.gmt_create,'dd')
+
+LEFT  join 
+ ( --点击发起借款
+    select mobileNumber,gmt_create
+    from hour_event_jq_point_record_di
+    where point_sub_code ='click.jq_qjq_jkxq'
+    and pt <= to_char(dateadd(getdate(), -1, 'dd'), 'yyyymmdd')
+    
+  ) t4
+  on t1.user_name = t4.mobilenumber
+and datetrunc(t1.gmt_create,'dd')  = datetrunc(t4.gmt_create,'dd')
+
+left JOIN
+
+    (  --发起借款
+select user_id ,gmt_create
+from hour_lsd_borrow_cash_da
+where pt = to_char(dateadd(getdate(), -1, 'dd'), 'yyyymmdd')
+  ) t
+on t1.id = t.user_id 
+ and datetrunc(t1.gmt_create,'dd')  = datetrunc(t.gmt_create,'dd')
+
+group by datetrunc(t1.gmt_create,'dd') 
+order by  日期 desc
